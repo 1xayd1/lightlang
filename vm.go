@@ -334,9 +334,6 @@ func (v *VM) Run(file string) error {
 					target := int(toFloat64(inst.Arg))
 					f.Ip = target
 				}
-			case OpPrint:
-				val := v.pop()
-				fmt.Printf("%v\n", val)
 			case OpPop:
 				if v.Sp > 0 {
 					v.Sp--
