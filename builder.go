@@ -23,7 +23,6 @@ const (
 	OpCall
 	OpCallIndirect
 	OpReturn
-	OpPrint
 	OpNop
 	OpJump
 	OpJumpIfFalse
@@ -58,7 +57,7 @@ type ForLoopNode struct {
 
 type SymbolTable struct {
 	Parent    *SymbolTable
-	Locals    map[string]int
+	Locals    map[string]int // name -> stack index
 	Globals   map[string]string
 	IsFunc    bool
 	NextLocal int
@@ -197,7 +196,7 @@ func (b *Builder) Bytecode() ([]Instruction, []Constant) {
 
 func (n *LiteralNode) TypeCheck(sym *SymbolTable) error { return nil }
 func (n *LiteralNode) Emit(b *Builder) {
-	idx := b.AddConstant(n.Value, n.Type)
+	idx := b.AddConstant(n.Value, n.Type) // n.Value is interface{} like int, float64, string
 	b.Emit(OpConstant, float64(idx))
 }
 
@@ -466,12 +465,6 @@ func (n *IndexAccessNode) Emit(b *Builder) {
 	b.Emit(OpGetIndex, nil)
 }
 
-func (n *PrintNode) TypeCheck(sym *SymbolTable) error { return n.Expr.TypeCheck(sym) }
-func (n *PrintNode) Emit(b *Builder) {
-	n.Expr.Emit(b)
-	b.Emit(OpPrint, nil)
-}
-
 func (n *ExprStmtNode) TypeCheck(sym *SymbolTable) error { return n.Expr.TypeCheck(sym) }
 func (n *ExprStmtNode) Emit(b *Builder) {
 	n.Expr.Emit(b)
@@ -644,4 +637,3 @@ func (n *BreakNode) TypeCheck(sym *SymbolTable) error { return nil }
 func (n *BreakNode) Emit(b *Builder) {
 	b.Emit(OpJump, -1)
 }
-
