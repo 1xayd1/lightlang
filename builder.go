@@ -58,7 +58,7 @@ type ForLoopNode struct {
 
 type SymbolTable struct {
 	Parent    *SymbolTable
-	Locals    map[string]int // name -> stack index
+	Locals    map[string]int
 	Globals   map[string]string
 	IsFunc    bool
 	NextLocal int
@@ -197,7 +197,7 @@ func (b *Builder) Bytecode() ([]Instruction, []Constant) {
 
 func (n *LiteralNode) TypeCheck(sym *SymbolTable) error { return nil }
 func (n *LiteralNode) Emit(b *Builder) {
-	idx := b.AddConstant(n.Value, n.Type) // n.Value is interface{} like int, float64, string
+	idx := b.AddConstant(n.Value, n.Type)
 	b.Emit(OpConstant, float64(idx))
 }
 
@@ -644,3 +644,4 @@ func (n *BreakNode) TypeCheck(sym *SymbolTable) error { return nil }
 func (n *BreakNode) Emit(b *Builder) {
 	b.Emit(OpJump, -1)
 }
+
