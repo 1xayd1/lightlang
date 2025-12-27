@@ -57,7 +57,7 @@ type ForLoopNode struct {
 
 type SymbolTable struct {
 	Parent    *SymbolTable
-	Locals    map[string]int // name -> stack index
+	Locals    map[string]int
 	Globals   map[string]string
 	IsFunc    bool
 	NextLocal int
@@ -66,8 +66,8 @@ type SymbolTable struct {
 func NewSymbolTable(parent *SymbolTable, isFunc bool) *SymbolTable {
 	return &SymbolTable{
 		Parent:    parent,
-		Locals:    make(map[string]int),
-		Globals:   make(map[string]string),
+		Locals:    make(map[string]int, 8),
+		Globals:   make(map[string]string, 4),
 		IsFunc:    isFunc,
 		NextLocal: 0,
 	}
@@ -79,20 +79,19 @@ func (s *SymbolTable) Define(name string, isLocal bool) int {
 		s.Locals[name] = idx
 		s.NextLocal++
 		return idx
-	} else {
-		s.Globals[name] = "any"
-		return -1
 	}
+	s.Globals[name] = "any"
+	return -1
 }
 
-func (s *SymbolTable) Resolve(name string) (isLocal bool, index int) {
+func (s *SymbolTable) Resolve(name string) (bool, int) {
 	if idx, ok := s.Locals[name]; ok {
 		return true, idx
 	}
 	if s.Parent != nil {
 		return s.Parent.Resolve(name)
 	}
-	return false, -1 // global
+	return false, -1
 }
 
 type Node interface {
@@ -125,7 +124,6 @@ type IndexAssignNode struct {
 	Index Node
 	Value Node
 }
-type PrintNode struct{ Expr Node }
 type ExprStmtNode struct{ Expr Node }
 type CallNode struct {
 	Target         string
@@ -168,10 +166,10 @@ type Builder struct {
 
 func NewBuilder() *Builder {
 	return &Builder{
-		Instructions: []Instruction{},
-		Constants:    []Constant{},
+		Instructions: make([]Instruction, 0, 64),
+		Constants:    make([]Constant, 0, 16),
 		SymbolTable:  NewSymbolTable(nil, false),
-		LoopStack:    []int{},
+		LoopStack:    make([]int, 0, 4),
 	}
 }
 
@@ -196,14 +194,13 @@ func (b *Builder) Bytecode() ([]Instruction, []Constant) {
 
 func (n *LiteralNode) TypeCheck(sym *SymbolTable) error { return nil }
 func (n *LiteralNode) Emit(b *Builder) {
-	idx := b.AddConstant(n.Value, n.Type) // n.Value is interface{} like int, float64, string
+	idx := b.AddConstant(n.Value, n.Type)
 	b.Emit(OpConstant, float64(idx))
 }
 
 func (n *VariableNode) TypeCheck(sym *SymbolTable) error { return nil }
 func (n *VariableNode) Emit(b *Builder) {
-	isLocal, idx := b.SymbolTable.Resolve(n.Name)
-	if isLocal {
+	if isLocal, idx := b.SymbolTable.Resolve(n.Name); isLocal {
 		b.Emit(OpGetLocal, float64(idx))
 	} else {
 		b.Emit(OpGetGlobal, n.Name)
@@ -219,9 +216,10 @@ func (n *UnaryOpNode) Emit(b *Builder) {
 }
 
 func (n *BinaryOpNode) TypeCheck(sym *SymbolTable) error {
-	n.Left.TypeCheck(sym)
-	n.Right.TypeCheck(sym)
-	return nil
+	if err := n.Left.TypeCheck(sym); err != nil {
+		return err
+	}
+	return n.Right.TypeCheck(sym)
 }
 
 func (n *BinaryOpNode) Emit(b *Builder) {
@@ -253,62 +251,65 @@ func (n *BinaryOpNode) Emit(b *Builder) {
 	case "or":
 		b.Emit(OpAdd, nil)
 	}
-	return
 }
 
 func (n *ForLoopNode) TypeCheck(sym *SymbolTable) error {
 	if n.Type == "in" {
 		sym.Define(n.LoopVar, true)
 		if n.Collection != nil {
-			n.Collection.TypeCheck(sym)
+			return n.Collection.TypeCheck(sym)
 		}
 	} else {
 		if n.Init != nil {
-			n.Init.TypeCheck(sym)
+			if err := n.Init.TypeCheck(sym); err != nil {
+				return err
+			}
 		}
 		if n.Cond != nil {
-			n.Cond.TypeCheck(sym)
+			if err := n.Cond.TypeCheck(sym); err != nil {
+				return err
+			}
 		}
 		if n.Update != nil {
-			n.Update.TypeCheck(sym)
+			if err := n.Update.TypeCheck(sym); err != nil {
+				return err
+			}
 		}
 	}
 	for _, stmt := range n.Body {
-		stmt.TypeCheck(sym)
+		if err := stmt.TypeCheck(sym); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (n *ForLoopNode) Emit(b *Builder) {
-	switch n.Type {
-	case "cstyle":
-		n.emitCstyle(b)
-	case "in":
+	if n.Type == "in" {
 		n.emitInLoop(b)
-	default:
+	} else {
 		n.emitCstyle(b)
+	}
+}
+
+func (n *ForLoopNode) emitUpdateOrInit(b *Builder, node Node) {
+	if assign, ok := node.(*AssignmentNode); ok {
+		assign.Expr.Emit(b)
+		if isLocal, idx := b.SymbolTable.Resolve(assign.Name); isLocal {
+			b.Emit(OpSetLocal, float64(idx))
+		} else {
+			b.Emit(OpSetGlobal, assign.Name)
+		}
+		b.Emit(OpPop, nil)
+	} else {
+		node.Emit(b)
+		b.Emit(OpPop, nil)
 	}
 }
 
 func (n *ForLoopNode) emitCstyle(b *Builder) {
 	if n.Init != nil {
-		if assign, ok := n.Init.(*AssignmentNode); ok {
-			assign.Expr.Emit(b)
-			isLocal, idx := b.SymbolTable.Resolve(assign.Name)
-			if isLocal {
-				b.Emit(OpSetLocal, float64(idx))
-			} else {
-				b.Emit(OpSetGlobal, assign.Name)
-			}
-			if isLocal {
-				b.Emit(OpGetLocal, float64(idx))
-			} else {
-				b.Emit(OpGetGlobal, assign.Name)
-			}
-		} else {
-			n.Init.Emit(b)
-		}
-		b.Emit(OpPop, nil)
+		n.emitUpdateOrInit(b, n.Init)
 	}
 
 	startIdx := len(b.Instructions)
@@ -324,23 +325,10 @@ func (n *ForLoopNode) emitCstyle(b *Builder) {
 		}
 
 		if n.Update != nil {
-			if assign, ok := n.Update.(*AssignmentNode); ok {
-				assign.Expr.Emit(b)
-				isLocal, idx := b.SymbolTable.Resolve(assign.Name)
-				if isLocal {
-					b.Emit(OpSetLocal, float64(idx))
-				} else {
-					b.Emit(OpSetGlobal, assign.Name)
-				}
-				b.Emit(OpPop, nil)
-			} else {
-				n.Update.Emit(b)
-				b.Emit(OpPop, nil)
-			}
+			n.emitUpdateOrInit(b, n.Update)
 		}
 
 		b.Emit(OpJump, startIdx)
-
 		exitIdx := len(b.Instructions)
 		b.UpdateInstruction(jumpFalseIdx, exitIdx)
 	} else {
@@ -349,19 +337,7 @@ func (n *ForLoopNode) emitCstyle(b *Builder) {
 		}
 
 		if n.Update != nil {
-			if assign, ok := n.Update.(*AssignmentNode); ok {
-				assign.Expr.Emit(b)
-				isLocal, idx := b.SymbolTable.Resolve(assign.Name)
-				if isLocal {
-					b.Emit(OpSetLocal, float64(idx))
-				} else {
-					b.Emit(OpSetGlobal, assign.Name)
-				}
-				b.Emit(OpPop, nil)
-			} else {
-				n.Update.Emit(b)
-				b.Emit(OpPop, nil)
-			}
+			n.emitUpdateOrInit(b, n.Update)
 		}
 
 		b.Emit(OpJump, startIdx)
@@ -372,7 +348,6 @@ func (n *ForLoopNode) emitCstyle(b *Builder) {
 
 func (n *ForLoopNode) emitInLoop(b *Builder) {
 	n.Collection.Emit(b)
-
 	b.Emit(OpConstant, float64(b.AddConstant(1, "number")))
 	b.Emit(OpCall, "len")
 
@@ -409,7 +384,6 @@ func (n *ForLoopNode) emitInLoop(b *Builder) {
 	b.Emit(OpSetLocal, float64(counterIdx))
 
 	b.Emit(OpJump, startIdx)
-
 	exitIdx := len(b.Instructions)
 	b.UpdateInstruction(jumpFalseIdx, exitIdx)
 
@@ -417,7 +391,9 @@ func (n *ForLoopNode) emitInLoop(b *Builder) {
 }
 
 func (n *AssignmentNode) TypeCheck(sym *SymbolTable) error {
-	n.Expr.TypeCheck(sym)
+	if err := n.Expr.TypeCheck(sym); err != nil {
+		return err
+	}
 	if n.IsLocal {
 		sym.Define(n.Name, true)
 	}
@@ -428,27 +404,26 @@ func (n *AssignmentNode) Emit(b *Builder) {
 	n.Expr.Emit(b)
 
 	if n.IsLocal {
-		index := b.SymbolTable.Define(n.Name, true)
-		if index >= 0 {
+		if index := b.SymbolTable.Define(n.Name, true); index >= 0 {
 			b.Emit(OpSetLocal, float64(index))
 		} else {
 			b.Emit(OpSetGlobal, n.Name)
 		}
+	} else if isLocal, index := b.SymbolTable.Resolve(n.Name); isLocal {
+		b.Emit(OpSetLocal, float64(index))
 	} else {
-		isLocal, index := b.SymbolTable.Resolve(n.Name)
-		if isLocal {
-			b.Emit(OpSetLocal, float64(index))
-		} else {
-			b.Emit(OpSetGlobal, n.Name)
-		}
+		b.Emit(OpSetGlobal, n.Name)
 	}
 }
 
 func (n *IndexAssignNode) TypeCheck(sym *SymbolTable) error {
-	n.Table.TypeCheck(sym)
-	n.Index.TypeCheck(sym)
-	n.Value.TypeCheck(sym)
-	return nil
+	if err := n.Table.TypeCheck(sym); err != nil {
+		return err
+	}
+	if err := n.Index.TypeCheck(sym); err != nil {
+		return err
+	}
+	return n.Value.TypeCheck(sym)
 }
 
 func (n *IndexAssignNode) Emit(b *Builder) {
@@ -473,7 +448,9 @@ func (n *ExprStmtNode) Emit(b *Builder) {
 
 func (n *CallNode) TypeCheck(sym *SymbolTable) error {
 	for _, arg := range n.Args {
-		arg.TypeCheck(sym)
+		if err := arg.TypeCheck(sym); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -534,15 +511,21 @@ func (n *WhileLoopNode) Emit(b *Builder) {
 
 func (n *IfNode) TypeCheck(sym *SymbolTable) error {
 	for _, cond := range n.Conditions {
-		cond.TypeCheck(sym)
+		if err := cond.TypeCheck(sym); err != nil {
+			return err
+		}
 	}
 	for _, body := range n.Bodies {
 		for _, stmt := range body {
-			stmt.TypeCheck(sym)
+			if err := stmt.TypeCheck(sym); err != nil {
+				return err
+			}
 		}
 	}
 	for _, stmt := range n.ElseBody {
-		stmt.TypeCheck(sym)
+		if err := stmt.TypeCheck(sym); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -605,12 +588,12 @@ func (n *FuncDefNode) Emit(b *Builder) {
 	}
 
 	if len(b.Instructions) == 0 || b.Instructions[len(b.Instructions)-1].Op != OpReturn {
+		b.Emit(OpConstant, float64(b.AddConstant(nil, "nil")))
 		b.Emit(OpReturn, nil)
 	}
 
-	funcBodyEnd := len(b.Instructions)
 	b.SymbolTable = prevSym
-	b.UpdateInstruction(funcJumpIdx, funcBodyEnd)
+	b.UpdateInstruction(funcJumpIdx, len(b.Instructions))
 
 	idx := b.AddConstant(float64(startIp), "funcptr")
 	b.Emit(OpMakeFunc, float64(idx))
