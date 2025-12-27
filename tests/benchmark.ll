@@ -1,7 +1,7 @@
 let start = tick()
 
 let i = 0
-while i < 10000000 do
+while i < 50000000 do
     i = i + 1
 end
 
