@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-
 	"lightlang/builtins"
 )
 
@@ -30,8 +29,8 @@ type VM struct {
 
 func NewVM() *VM {
 	return &VM{
-		Stack:   make([]interface{}, 4096),
-		Globals: make(map[string]interface{}, 64),
+		Stack:   make([]interface{}, 8192),
+		Globals: make(map[string]interface{}, 128),
 		Sp:      0,
 	}
 }
@@ -157,7 +156,9 @@ func (v *VM) Run(file string) error {
 					case int:
 						v.push(float64(av + bv))
 					case string:
-						v.push(fmt.Sprintf("%v%v", av, bv))
+						v.push(fmt.Sprintf("%v%v", a, b))
+					case bool:
+						v.push(fmt.Sprintf("%v%v", a, b))
 					}
 				case string:
 					v.push(fmt.Sprintf("%v%v", a, b))
@@ -236,7 +237,15 @@ func (v *VM) Run(file string) error {
 				table := v.pop()
 				switch t := table.(type) {
 				case []interface{}:
-					i := int(index.(float64))
+					var i int
+					switch idx := index.(type) {
+					case float64:
+						i = int(idx)
+					case int:
+						i = idx
+					default:
+						i = int(toFloat64(index))
+					}
 					if i >= 0 && i < len(t) {
 						t[i] = val
 					}
@@ -305,14 +314,24 @@ func (v *VM) Run(file string) error {
 				return fmt.Errorf("cannot call non-function")
 
 			case OpReturn:
-				retVal := v.pop()
-				returningFrame := v.CallStack[len(v.CallStack)-1]
-				v.Sp = returningFrame.Sp
-				v.CallStack = v.CallStack[:len(v.CallStack)-1]
-				if len(v.CallStack) > 0 {
-					v.push(retVal)
+				var retVal interface{}
+				if v.Sp > f.Sp {
+					retVal = v.pop()
+				} else {
+					retVal = nil
 				}
-				break
+				v.CallStack = v.CallStack[:len(v.CallStack)-1]
+
+				if len(v.CallStack) > 0 {
+					callerFrame := &v.CallStack[len(v.CallStack)-1]
+					v.Sp = callerFrame.Sp
+					v.push(retVal)
+				} else {
+					v.Sp = 0
+				}
+
+				f.Ip = len(f.Instructions)
+				continue
 			case OpMakeFunc:
 				idx := int(inst.Arg.(float64))
 				entry := v.Constants[idx].Value
