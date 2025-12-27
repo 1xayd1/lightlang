@@ -154,6 +154,10 @@ type FuncDefNode struct {
 	Params []string
 	Body   []Node
 }
+type AnonymousFuncNode struct {
+	Params []string
+	Body   []Node
+}
 type ReturnNode struct{ Value Node }
 type BreakNode struct{}
 
@@ -459,12 +463,13 @@ func (n *CallNode) Emit(b *Builder) {
 	for _, arg := range n.Args {
 		arg.Emit(b)
 	}
-	b.Emit(OpConstant, float64(b.AddConstant(float64(len(n.Args)), "number")))
 
 	if n.CallType == "direct" {
+		b.Emit(OpConstant, float64(b.AddConstant(float64(len(n.Args)), "number")))
 		b.Emit(OpCall, n.Target)
 	} else {
 		n.IndirectTarget.Emit(b)
+		b.Emit(OpConstant, float64(b.AddConstant(float64(len(n.Args)), "number")))
 		b.Emit(OpCallIndirect, nil)
 	}
 }
@@ -619,4 +624,37 @@ func (n *ReturnNode) Emit(b *Builder) {
 func (n *BreakNode) TypeCheck(sym *SymbolTable) error { return nil }
 func (n *BreakNode) Emit(b *Builder) {
 	b.Emit(OpJump, -1)
+}
+
+func (n *AnonymousFuncNode) TypeCheck(sym *SymbolTable) error {
+	return nil
+}
+
+func (n *AnonymousFuncNode) Emit(b *Builder) {
+	b.Emit(OpJump, 0)
+	funcJumpIdx := len(b.Instructions) - 1
+
+	prevSym := b.SymbolTable
+	b.SymbolTable = NewSymbolTable(prevSym, true)
+
+	for _, param := range n.Params {
+		b.SymbolTable.Define(param, true)
+	}
+
+	startIp := len(b.Instructions)
+
+	for _, stmt := range n.Body {
+		stmt.Emit(b)
+	}
+
+	if len(b.Instructions) == 0 || b.Instructions[len(b.Instructions)-1].Op != OpReturn {
+		b.Emit(OpConstant, float64(b.AddConstant(nil, "nil")))
+		b.Emit(OpReturn, nil)
+	}
+
+	b.SymbolTable = prevSym
+	b.UpdateInstruction(funcJumpIdx, len(b.Instructions))
+
+	idx := b.AddConstant(float64(startIp), "funcptr")
+	b.Emit(OpMakeFunc, float64(idx))
 }
