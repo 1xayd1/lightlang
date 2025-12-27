@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <defs>
+    <linearGradient id="a" x1="46.773" x2="69.907" y1="86.462" y2="126.732" gradientTransform="matrix(0.86083, 0, 0, 0.86942, 253.018738, 145.665329)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0046eb" id="stop1"/>
+      <stop offset="1" stop-color="#4a80ff" id="stop2"/>
+    </linearGradient>
+  </defs>
+  <g id="svg1" transform="matrix(11.116146, 0, 0, 10.550254, -3196.597412, -2214.019043)" style="">
+    <path d="M 289.226 225.271 L 289.226 242.475 C 289.226 244.603 290.35 246.571 292.176 247.635 L 306.928 256.237 C 308.753 257.302 311.002 257.302 312.828 256.237 L 327.579 247.635 C 329.404 246.57 330.529 244.603 330.529 242.475 L 330.529 225.271 C 330.529 223.143 329.405 221.174 327.579 220.11 L 312.828 211.509 C 311.002 210.444 308.753 210.444 306.928 211.509 L 292.176 220.11 C 290.35 221.175 289.226 223.143 289.226 225.271 Z" fill="url(#a)" id="path12" style="stroke-width: 0.1px;"/>
+  </g>
+  <text style="fill: rgb(255, 255, 255); font-family: Calibri;" transform="matrix(25.217199, 0, 0, 22.403635, -4967.387207, -4734.012695)" x="200.143" y="227.92">LL</text>
+</svg>
