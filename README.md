@@ -1,4 +1,6 @@
-![logo](https://raw.githubusercontent.com/1xayd1/lightlang/refs/heads/main/Untitled.svg)
+<img src="https://raw.githubusercontent.com/1xayd1/lightlang/refs/heads/main/Untitled.svg" 
+     width="100" 
+     alt="Logo">
 # lightlang
 A simple experiment language written in 2 days (of editor time) in golang.
 I thought it'd be nice to make something like luau typescript python and other languages in golang so i decided to make this;
