@@ -1196,7 +1196,7 @@ func (p *ExprParser) parseBase() (Node, error) {
 		val, _ := strconv.ParseFloat(tok.Value, 64)
 		return &LiteralNode{Value: val, Type: "number"}, nil
 	}
-	if tok.Type == "WORD" || tok.Type == "KW" {
+	if tok.Type == "WORD" || tok.Type == "KW" || tok.Type == "LITERAL" {
 		p.advance()
 		if tok.Value == "true" {
 			return &LiteralNode{Value: true, Type: "bool"}, nil
@@ -1415,3 +1415,4 @@ func isStopKeyword(s string) bool {
 	}
 	return false
 }
+
