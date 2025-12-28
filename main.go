@@ -30,6 +30,7 @@ func BuildCommand(source string, output string) {
 	builder.Emit(OpHalt, nil)
 
 	instructions, constants := builder.Bytecode()
+	instructions, constants = OptimizeBytecode(instructions, constants, builder.SymbolTable)
 
 	err = SaveBytecode(output, instructions, constants)
 	if err != nil {
@@ -92,6 +93,8 @@ func main() {
 				node.Emit(builder)
 			}
 			builder.Emit(OpHalt, nil)
+
+			builder.Instructions, builder.Constants = OptimizeBytecode(builder.Instructions, builder.Constants, builder.SymbolTable)
 
 			vm.Instructions, vm.Constants = builder.Instructions, builder.Constants
 
